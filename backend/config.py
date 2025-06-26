@@ -1,0 +1,18 @@
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+DEBUG: bool = os.getenv("DEBUG", default=False)
+# SECRET_KEY: str = os.getenv("SECRET_KEY")
+
+SERVERLESS_CLUSTER_HOST: str = os.getenv("SERVERLESS_CLUSTER_HOST")
+SERVERLESS_CLUSTER_PORT: int = int(os.getenv("SERVERLESS_CLUSTER_PORT"))
+SERVERLESS_CLUSTER_USERNAME: str = os.getenv("SERVERLESS_CLUSTER_USERNAME")
+SERVERLESS_CLUSTER_PASSWORD: str = os.getenv("SERVERLESS_CLUSTER_PASSWORD")
+SERVERLESS_CLUSTER_DATABASE_NAME: str = os.getenv("SERVERLESS_CLUSTER_DATABASE_NAME")
+
+EMBEDDING_MODEL: str = os.getenv("EMBEDDING_MODEL")
+
+GITHUB_WEBHOOK_SECRET: str = os.getenv("GITHUB_WEBHOOK_SECRET")
+GITHUB_WEBHOOK_URL: str = os.getenv("GITHUB_WEBHOOK_URL", default="/github/webhook")

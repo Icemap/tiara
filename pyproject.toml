@@ -1,0 +1,23 @@
+[tool.poetry]
+name = "tiara"
+version = "0.1.0"
+description = ""
+package-mode = false
+authors = ["Cheese Wong <qizhi.wang@pingcap.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.11"
+pytidb = "^0.0.7"
+litellm = "^1.73.0"
+boto3 = "^1.38.42"
+dotenv = "^0.9.9"
+flask = "^3.1.1"
+flask-cors = "^6.0.1"
+pygithub = "^2.6.1"
+github-webhook = "^1.0.4"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
