@@ -2,7 +2,7 @@ from uuid import uuid4
 from http import HTTPStatus
 from flask import Flask, g, request
 from backend.model.base import init_tables
-from backend.tool.logging import get_logger, init_logger_handler
+from backend.tool.logger import get_logger, init_logger_handler
 from backend.tool.security import init_cors
 from backend import config
 

@@ -14,5 +14,15 @@ SERVERLESS_CLUSTER_DATABASE_NAME: str = os.getenv("SERVERLESS_CLUSTER_DATABASE_N
 
 EMBEDDING_MODEL: str = os.getenv("EMBEDDING_MODEL")
 
+
+# GitHub Config
+GITHUB_REPO_NAME: str = os.getenv("GITHUB_REPO_NAME")
+
+# For getting issues from the webhook
 GITHUB_WEBHOOK_SECRET: str = os.getenv("GITHUB_WEBHOOK_SECRET")
 GITHUB_WEBHOOK_URL: str = os.getenv("GITHUB_WEBHOOK_URL", default="/github/webhook")
+
+# GitHub App authentication
+GITHUB_APP_ID: str = os.getenv("GITHUB_APP_ID")
+GITHUB_APP_PRIVATE_KEY: str = os.getenv("GITHUB_APP_PRIVATE_KEY")  # Path to private key file or key content
+GITHUB_APP_INSTALLATION_ID: str = os.getenv("GITHUB_APP_INSTALLATION_ID")

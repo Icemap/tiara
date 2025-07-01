@@ -1,9 +1,8 @@
-
 from pytidb import TiDBClient
 
 from backend import config
 from backend.model.issue import ISSUE_TABLE_NAME, Issue
-from backend.tool.logging import get_logger
+from backend.tool.logger import get_logger
 
 logger = get_logger(__name__)
 
