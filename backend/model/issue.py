@@ -3,6 +3,7 @@ from typing import Any, Optional
 from datetime import datetime
 from pytidb.schema import TableModel, Field
 from pytidb.embeddings import EmbeddingFunction
+from sqlalchemy import Column, BigInteger
 
 from backend import config
 
@@ -20,72 +21,50 @@ class Issue(TableModel, table=True):
     """
     __tablename__ = ISSUE_TABLE_NAME
     
-    # GitHub Issue identifiers
-    github_issue_id: int = Field(primary_key=True)  # GitHub's unique issue ID
+    # GitHub Issue identifiers - using BIGINT for large GitHub IDs
+    github_issue_id: int = Field(sa_column=Column(BigInteger, primary_key=True))
     github_issue_number: int = Field(index=True)  # Issue number in the repository
-    node_id: str  # GitHub's GraphQL node ID
+    node_id: str  # GitHub's node ID for GraphQL API
     
     # Repository information
-    repository_name: str = Field(index=True)  # e.g., "Icemap/test-tiara"
-    repository_id: int
-    repository_url: str  # GitHub API URL for the repository
+    repository_name: str = Field(index=True)  # Repository name (e.g., "owner/repo")
+    repository_owner: str = Field(index=True)  # Repository owner
+    repository_id: int  # GitHub repository ID
     
     # Issue content
-    title: str = Field(index=True)
-    body: Optional[str] = None  # Issue description/body
-    body_html: Optional[str] = None  # HTML formatted body
-    body_text: Optional[str] = None  # Plain text body
+    title: str  # Issue title
+    body: Optional[str] = None  # Issue body/description (can be None)
     
-    # Issue status and state
-    state: str = Field(index=True)  # "open", "closed"
-    state_reason: Optional[str] = None  # "completed", "not_planned", "reopened", etc.
-    locked: bool = Field(default=False)
-    active_lock_reason: Optional[str] = None  # "off-topic", "too heated", "resolved", "spam"
+    # Issue status
+    state: str = Field(index=True)  # Issue state (open/closed)
+    state_reason: Optional[str] = None  # Reason for state change
+    locked: bool = Field(default=False)  # Whether the issue is locked
+    active_lock_reason: Optional[str] = None  # Reason for locking
     
-    # Author information
-    author_login: str = Field(index=True)
-    author_id: int
-    author_association: str  # "OWNER", "COLLABORATOR", "CONTRIBUTOR", "FIRST_TIME_CONTRIBUTOR", etc.
+    # User information (minimal)
+    author_login: str = Field(index=True)  # Issue author GitHub login
+    author_id: int  # Issue author GitHub ID
+    closed_by_login: Optional[str] = None  # Who closed the issue
+    closed_by_id: Optional[int] = None  # ID of who closed the issue
     
-    # Assignee information (primary assignee - for backward compatibility)
-    assignee_login: Optional[str] = None
-    assignee_id: Optional[int] = None
+    # Assignees and labels (JSON storage)
+    assignees: Optional[str] = None  # JSON string of assignee data
+    labels: Optional[str] = None  # JSON string of label data
     
-    # Multiple assignees (stored as JSON)
-    assignees: Optional[str] = None  # JSON array of assignee objects [{login, id}, ...]
-    
-    # Labels (stored as JSON)
-    labels: Optional[str] = None  # JSON array of label objects [{name, color, description}, ...]
-    
-    # Milestone information
+    # Milestone
     milestone_title: Optional[str] = None
     milestone_id: Optional[int] = None
-    milestone_number: Optional[int] = None
-    milestone_state: Optional[str] = None  # "open", "closed"
     
     # Timestamps
-    created_at: datetime = Field(index=True)
-    updated_at: datetime = Field(index=True)
+    created_at: datetime
+    updated_at: datetime
     closed_at: Optional[datetime] = None
     
-    # User who closed the issue
-    closed_by_login: Optional[str] = None
-    closed_by_id: Optional[int] = None
-    
     # URLs
-    html_url: str  # Public GitHub URL
-    url: str  # GitHub API URL
+    html_url: str  # GitHub issue URL
+    url: str  # API URL
     
-    # Interaction counts
-    comments_count: int = Field(default=0)
-    
-    # Draft status (for pull requests)
-    draft: Optional[bool] = None
-    
-    # Search relevance score (when retrieved from search)
-    score: Optional[float] = None
-    
-    # Vector embedding for issue content (title + body)
+    # Vector embeddings for content search
     title_vec: Optional[Any] = text_embedding_function.VectorField(
         source_field="title",
     )
@@ -94,143 +73,78 @@ class Issue(TableModel, table=True):
     )
     
     @classmethod
-    def from_github_issue(cls, github_issue, repository_name: str = None):
+    def from_github_issue(cls, github_issue: Any) -> "Issue":
         """
         Convert a PyGithub Issue object to our Issue model.
         
         Args:
             github_issue: PyGithub Issue object
-            repository_name: Repository name (e.g., "owner/repo"), if not available from issue
             
         Returns:
-            Issue: Our Issue model instance
+            Issue model instance
         """
-        # Extract repository info
-        if hasattr(github_issue, 'repository') and github_issue.repository:
-            repo_name = github_issue.repository.full_name
-            repo_id = github_issue.repository.id
-            repo_url = github_issue.repository.url
-        else:
-            repo_name = repository_name or "unknown/unknown"
-            # Extract repo info from URL if possible
-            if hasattr(github_issue, 'repository_url'):
-                repo_url = github_issue.repository_url
-                # Try to extract repo ID from URL (this might not always work)
-                repo_id = 0  # Default fallback
-            else:
-                repo_url = ""
-                repo_id = 0
+        # Parse repository info
+        repo = github_issue.repository
+        repo_full_name = repo.full_name  # e.g., "owner/repo"
+        repo_owner = repo_full_name.split('/')[0]
         
-        # Handle assignees
-        assignees_json = None
-        assignee_login = None
-        assignee_id = None
+        # Process assignees
+        assignees_data = []
+        for assignee in github_issue.assignees:
+            assignees_data.append({
+                'login': assignee.login,
+                'id': assignee.id
+            })
         
-        if hasattr(github_issue, 'assignees') and github_issue.assignees:
-            assignees_data = []
-            for assignee in github_issue.assignees:
-                assignees_data.append({
-                    "login": assignee.login,
-                    "id": assignee.id,
-                    "avatar_url": assignee.avatar_url if hasattr(assignee, 'avatar_url') else None
-                })
-            assignees_json = json.dumps(assignees_data)
-            
-            # Set primary assignee for backward compatibility
-            if assignees_data:
-                assignee_login = assignees_data[0]["login"]
-                assignee_id = assignees_data[0]["id"]
-        elif hasattr(github_issue, 'assignee') and github_issue.assignee:
-            assignee_login = github_issue.assignee.login
-            assignee_id = github_issue.assignee.id
-            assignees_json = json.dumps([{
-                "login": assignee_login,
-                "id": assignee_id,
-                "avatar_url": github_issue.assignee.avatar_url if hasattr(github_issue.assignee, 'avatar_url') else None
-            }])
+        # Process labels
+        labels_data = []
+        for label in github_issue.labels:
+            labels_data.append({
+                'name': label.name,
+                'color': label.color,
+                'description': label.description
+            })
         
-        # Handle labels
-        labels_json = None
-        if hasattr(github_issue, 'labels') and github_issue.labels:
-            labels_data = []
-            for label in github_issue.labels:
-                labels_data.append({
-                    "name": label.name,
-                    "color": label.color if hasattr(label, 'color') else None,
-                    "description": label.description if hasattr(label, 'description') else None
-                })
-            labels_json = json.dumps(labels_data)
+        # Process milestone
+        milestone = github_issue.milestone
+        milestone_title = milestone.title if milestone else None
+        milestone_id = milestone.id if milestone else None
         
-        # Handle milestone
-        milestone_title = None
-        milestone_id = None
-        milestone_number = None
-        milestone_state = None
-        if hasattr(github_issue, 'milestone') and github_issue.milestone:
-            milestone_title = github_issue.milestone.title
-            milestone_id = github_issue.milestone.id
-            milestone_number = github_issue.milestone.number if hasattr(github_issue.milestone, 'number') else None
-            milestone_state = github_issue.milestone.state if hasattr(github_issue.milestone, 'state') else None
-        
-        # Handle closed_by
-        closed_by_login = None
-        closed_by_id = None
-        if hasattr(github_issue, 'closed_by') and github_issue.closed_by:
-            closed_by_login = github_issue.closed_by.login
-            closed_by_id = github_issue.closed_by.id
+        # Process closed_by
+        closed_by = github_issue.closed_by
+        closed_by_login = closed_by.login if closed_by else None
+        closed_by_id = closed_by.id if closed_by else None
         
         return cls(
             github_issue_id=github_issue.id,
             github_issue_number=github_issue.number,
-            node_id=github_issue.node_id if hasattr(github_issue, 'node_id') else "",
-            
-            repository_name=repo_name,
-            repository_id=repo_id,
-            repository_url=repo_url,
-            
+            node_id=github_issue.node_id,
+            repository_name=repo_full_name,
+            repository_owner=repo_owner,
+            repository_id=repo.id,
             title=github_issue.title,
             body=github_issue.body,
-            body_html=github_issue.body_html if hasattr(github_issue, 'body_html') else None,
-            body_text=github_issue.body_text if hasattr(github_issue, 'body_text') else None,
-            
             state=github_issue.state,
-            state_reason=github_issue.state_reason if hasattr(github_issue, 'state_reason') else None,
+            state_reason=github_issue.state_reason,
             locked=github_issue.locked,
-            active_lock_reason=github_issue.active_lock_reason if hasattr(github_issue, 'active_lock_reason') else None,
-            
+            active_lock_reason=github_issue.active_lock_reason,
             author_login=github_issue.user.login,
             author_id=github_issue.user.id,
-            author_association=github_issue.author_association if hasattr(github_issue, 'author_association') else "NONE",
-            
-            assignee_login=assignee_login,
-            assignee_id=assignee_id,
-            assignees=assignees_json,
-            
-            labels=labels_json,
-            
-            milestone_title=milestone_title,
-            milestone_id=milestone_id,
-            milestone_number=milestone_number,
-            milestone_state=milestone_state,
-            
-            created_at=github_issue.created_at,
-            updated_at=github_issue.updated_at,
-            closed_at=github_issue.closed_at if hasattr(github_issue, 'closed_at') else None,
-            
             closed_by_login=closed_by_login,
             closed_by_id=closed_by_id,
-            
+            assignees=json.dumps(assignees_data) if assignees_data else None,
+            labels=json.dumps(labels_data) if labels_data else None,
+            milestone_title=milestone_title,
+            milestone_id=milestone_id,
+            created_at=github_issue.created_at,
+            updated_at=github_issue.updated_at,
+            closed_at=github_issue.closed_at,
             html_url=github_issue.html_url,
-            url=github_issue.url,
-            
-            comments_count=github_issue.comments if hasattr(github_issue, 'comments') else 0,
-            
-            draft=github_issue.draft if hasattr(github_issue, 'draft') else None,
-            score=github_issue.score if hasattr(github_issue, 'score') else None,
+            url=github_issue.url
         )
     
     @classmethod
-    def from_webhook_payload(cls, payload: dict):
+    def from_webhook_payload(cls, payload: dict) -> "Issue":
         """
         Convert a GitHub webhook payload to our Issue model.
         
@@ -238,144 +152,75 @@ class Issue(TableModel, table=True):
             payload: GitHub webhook payload dictionary
             
         Returns:
-            Issue: Our Issue model instance
+            Issue model instance
         """
-        # Extract issue data from payload
         issue_data = payload.get('issue', {})
-        repository_data = payload.get('repository', {})
+        repo_data = payload.get('repository', {})
         
-        if not issue_data:
-            raise ValueError("No issue data found in webhook payload")
+        # Repository information
+        repo_full_name = repo_data.get('full_name', '')
+        repo_owner = repo_data.get('owner', {}).get('login', '')
+        repo_id = repo_data.get('id', 0)
         
-        # Extract repository info
-        repo_name = repository_data.get('full_name', 'unknown/unknown')
-        repo_id = repository_data.get('id', 0)
-        repo_url = repository_data.get('url', '')
+        # Process assignees
+        assignees_data = []
+        for assignee in issue_data.get('assignees', []):
+            assignees_data.append({
+                'login': assignee.get('login'),
+                'id': assignee.get('id')
+            })
         
-        # Handle assignees
-        assignees_json = None
-        assignee_login = None
-        assignee_id = None
+        # Process labels
+        labels_data = []
+        for label in issue_data.get('labels', []):
+            labels_data.append({
+                'name': label.get('name'),
+                'color': label.get('color'),
+                'description': label.get('description')
+            })
         
-        assignees_data = issue_data.get('assignees', [])
-        if assignees_data:
-            assignees_list = []
-            for assignee in assignees_data:
-                assignees_list.append({
-                    "login": assignee.get('login'),
-                    "id": assignee.get('id'),
-                    "avatar_url": assignee.get('avatar_url')
-                })
-            assignees_json = json.dumps(assignees_list)
-            
-            # Set primary assignee for backward compatibility
-            if assignees_list:
-                assignee_login = assignees_list[0]["login"]
-                assignee_id = assignees_list[0]["id"]
-        elif issue_data.get('assignee'):
-            assignee_data = issue_data['assignee']
-            assignee_login = assignee_data.get('login')
-            assignee_id = assignee_data.get('id')
-            assignees_json = json.dumps([{
-                "login": assignee_login,
-                "id": assignee_id,
-                "avatar_url": assignee_data.get('avatar_url')
-            }])
+        # Process milestone
+        milestone = issue_data.get('milestone')
+        milestone_title = milestone.get('title') if milestone else None
+        milestone_id = milestone.get('id') if milestone else None
         
-        # Handle labels
-        labels_json = None
-        labels_data = issue_data.get('labels', [])
-        if labels_data:
-            labels_list = []
-            for label in labels_data:
-                labels_list.append({
-                    "name": label.get('name'),
-                    "color": label.get('color'),
-                    "description": label.get('description')
-                })
-            labels_json = json.dumps(labels_list)
-        
-        # Handle milestone
-        milestone_title = None
-        milestone_id = None
-        milestone_number = None
-        milestone_state = None
-        milestone_data = issue_data.get('milestone')
-        if milestone_data:
-            milestone_title = milestone_data.get('title')
-            milestone_id = milestone_data.get('id')
-            milestone_number = milestone_data.get('number')
-            milestone_state = milestone_data.get('state')
-        
-        # Handle closed_by
-        closed_by_login = None
-        closed_by_id = None
-        closed_by_data = issue_data.get('closed_by')
-        if closed_by_data:
-            closed_by_login = closed_by_data.get('login')
-            closed_by_id = closed_by_data.get('id')
+        # Process closed_by
+        closed_by = issue_data.get('closed_by')
+        closed_by_login = closed_by.get('login') if closed_by else None
+        closed_by_id = closed_by.get('id') if closed_by else None
         
         # Parse timestamps
-        def parse_timestamp(timestamp_str):
-            if timestamp_str:
-                return datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
+        def parse_datetime(dt_str):
+            if dt_str:
+                return datetime.fromisoformat(dt_str.replace('Z', '+00:00'))
             return None
-        
-        created_at = parse_timestamp(issue_data.get('created_at'))
-        updated_at = parse_timestamp(issue_data.get('updated_at'))
-        closed_at = parse_timestamp(issue_data.get('closed_at'))
-        
-        # Extract user info
-        user_data = issue_data.get('user', {})
         
         return cls(
             github_issue_id=issue_data.get('id'),
             github_issue_number=issue_data.get('number'),
-            node_id=issue_data.get('node_id', ''),
-            
-            repository_name=repo_name,
+            node_id=issue_data.get('node_id'),
+            repository_name=repo_full_name,
+            repository_owner=repo_owner,
             repository_id=repo_id,
-            repository_url=repo_url,
-            
-            title=issue_data.get('title', ''),
+            title=issue_data.get('title'),
             body=issue_data.get('body'),
-            body_html=None,  # Not available in webhook payload
-            body_text=None,  # Not available in webhook payload
-            
-            state=issue_data.get('state', 'open'),
+            state=issue_data.get('state'),
             state_reason=issue_data.get('state_reason'),
             locked=issue_data.get('locked', False),
             active_lock_reason=issue_data.get('active_lock_reason'),
-            
-            author_login=user_data.get('login', ''),
-            author_id=user_data.get('id', 0),
-            author_association=issue_data.get('author_association', 'NONE'),
-            
-            assignee_login=assignee_login,
-            assignee_id=assignee_id,
-            assignees=assignees_json,
-            
-            labels=labels_json,
-            
-            milestone_title=milestone_title,
-            milestone_id=milestone_id,
-            milestone_number=milestone_number,
-            milestone_state=milestone_state,
-            
-            created_at=created_at,
-            updated_at=updated_at,
-            closed_at=closed_at,
-            
+            author_login=issue_data.get('user', {}).get('login'),
+            author_id=issue_data.get('user', {}).get('id'),
             closed_by_login=closed_by_login,
             closed_by_id=closed_by_id,
-            
-            html_url=issue_data.get('html_url', ''),
-            url=issue_data.get('url', ''),
-            
-            comments_count=issue_data.get('comments', 0),
-            
-            draft=None,  # Not available in webhook payload
-            score=None,  # Not relevant for webhooks
+            assignees=json.dumps(assignees_data) if assignees_data else None,
+            labels=json.dumps(labels_data) if labels_data else None,
+            milestone_title=milestone_title,
+            milestone_id=milestone_id,
+            created_at=parse_datetime(issue_data.get('created_at')),
+            updated_at=parse_datetime(issue_data.get('updated_at')),
+            closed_at=parse_datetime(issue_data.get('closed_at')),
+            html_url=issue_data.get('html_url'),
+            url=issue_data.get('url')
         )
     
     def get_content_for_embedding(self) -> str:

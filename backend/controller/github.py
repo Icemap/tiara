@@ -59,10 +59,37 @@ def save_issue_to_database(issue: Issue, action: str):
         issue: Issue model instance
         action: The webhook action (opened, edited, closed, etc.)
     """
-    logger.info(f"Would save issue to database: {issue.github_issue_id} (action: {action})")
+    logger.info(f"Saving issue to database: {issue.github_issue_id} (action: {action})")
 
     table = base.db.open_table(ISSUE_TABLE_NAME)
-    if action == 'opened':
-        table.insert(issue)
-    else:
-        table.update(issue)
+    
+    try:
+        if action == 'opened':
+            # Insert new issue
+            table.insert(issue)
+            logger.info(f"Inserted new issue #{issue.github_issue_number}")
+        else:
+            # Update existing issue
+            existing_issue = table.get(issue.github_issue_id)
+            
+            if existing_issue:
+                # Convert issue object to dict for update
+                update_data = {}
+                for field_name in Issue.model_fields:
+                    if field_name != 'github_issue_id':  # Don't update primary key
+                        value = getattr(issue, field_name)
+                        update_data[field_name] = value
+                
+                table.update(
+                    update_data,
+                    {"github_issue_id": issue.github_issue_id}
+                )
+                logger.info(f"Updated existing issue #{issue.github_issue_number}")
+            else:
+                # Issue doesn't exist, insert it
+                table.insert(issue)
+                logger.info(f"Inserted new issue #{issue.github_issue_number} (not found for update)")
+                
+    except Exception as e:
+        logger.error(f"Error saving issue #{issue.github_issue_number}: {str(e)}")
+        raise

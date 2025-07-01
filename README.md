@@ -19,16 +19,14 @@ This project supports GitHub App authentication for accessing GitHub API. Here's
 ### Step 2: Configure Permissions
 
 Set the following permissions for your GitHub App:
+
 - **Repository permissions**:
   - Issues: Read & Write
   - Metadata: Read
-  - Pull requests: Read & Write (if needed)
 
 ### Step 3: Subscribe to Events
 
-Subscribe to these events:
-- Issues
-- Issue comments
+Subscribe to Issues events
 
 ### Step 4: Generate Private Key
 
