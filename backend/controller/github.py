@@ -4,6 +4,7 @@ from backend.tool.logger import get_logger
 from github_webhook import Webhook
 from backend import config
 from backend.model.issue import ISSUE_TABLE_NAME, Issue
+from backend.model.init_database import diff_and_get_changed_fields, PROTECTED_FIELDS
 
 logger = get_logger(__name__)
 
@@ -53,7 +54,7 @@ def init_webhook(app):
 
 def save_issue_to_database(issue: Issue, action: str):
     """
-    Save or update issue in database.
+    Save or update issue in database with diff optimization.
     
     Args:
         issue: Issue model instance
@@ -69,22 +70,26 @@ def save_issue_to_database(issue: Issue, action: str):
             table.insert(issue)
             logger.info(f"Inserted new issue #{issue.github_issue_number}")
         else:
-            # Update existing issue
+            # Update existing issue with diff optimization
             existing_issue = table.get(issue.github_issue_id)
             
             if existing_issue:
-                # Convert issue object to dict for update
-                update_data = {}
-                for field_name in Issue.model_fields:
-                    if field_name != 'github_issue_id':  # Don't update primary key
-                        value = getattr(issue, field_name)
-                        update_data[field_name] = value
+                logger.info(f"Checking for changes in issue #{issue.github_issue_number} (action: {action})")
                 
-                table.update(
-                    update_data,
-                    {"github_issue_id": issue.github_issue_id}
-                )
-                logger.info(f"Updated existing issue #{issue.github_issue_number}")
+                # Get only changed fields
+                changed_fields = diff_and_get_changed_fields(existing_issue, issue)
+                
+                if changed_fields:
+                    logger.info(f"Updating {len(changed_fields)} changed fields for issue #{issue.github_issue_number}")
+                    logger.debug(f"Changed fields: {list(changed_fields.keys())}")
+                    
+                    table.update(
+                        changed_fields,
+                        {"github_issue_id": issue.github_issue_id}
+                    )
+                    logger.info(f"Updated existing issue #{issue.github_issue_number}")
+                else:
+                    logger.info(f"No changes detected for issue #{issue.github_issue_number}, skipping update")
             else:
                 # Issue doesn't exist, insert it
                 table.insert(issue)

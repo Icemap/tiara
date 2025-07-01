@@ -13,6 +13,9 @@ table_models = [
     (ISSUE_TABLE_NAME, Issue),
 ]
 
+# Fields that should not be updated to avoid overwriting vector embeddings or primary keys
+PROTECTED_FIELDS = {'github_issue_id', 'title_vec', 'body_vec'}
+
 def init_tables():
     """Initialize database tables if they don't exist."""
     for table_name, table_model in table_models:
@@ -24,9 +27,69 @@ def init_tables():
             logger.info(f"Table {table_name} already exists")
 
 
+def diff_and_get_changed_fields(existing_issue: Issue, new_issue: Issue) -> dict:
+    """
+    Compare existing issue with new issue and return only changed fields.
+    
+    Args:
+        existing_issue: Existing Issue model instance from database
+        new_issue: New Issue model instance
+        
+    Returns:
+        Dict containing only fields that have changed values
+    """
+    changed_fields = {}
+    
+    for field_name in Issue.model_fields:
+        # Skip protected fields
+        if field_name in PROTECTED_FIELDS:
+            continue
+            
+        new_value = getattr(new_issue, field_name)
+        existing_value = getattr(existing_issue, field_name)
+        
+        # Compare values - handle None values and type differences
+        if _values_are_different(existing_value, new_value):
+            changed_fields[field_name] = new_value
+            logger.debug(f"Field '{field_name}' changed: {existing_value} -> {new_value}")
+    
+    return changed_fields
+
+
+def _values_are_different(existing_value, new_value) -> bool:
+    """
+    Helper function to compare two values, handling None and type differences.
+    
+    Args:
+        existing_value: Value from database
+        new_value: New value from Issue model
+        
+    Returns:
+        True if values are different, False if they are the same
+    """
+    # Handle None values
+    if existing_value is None and new_value is None:
+        return False
+    if existing_value is None or new_value is None:
+        return True
+    
+    # Handle string comparison (database might return different types)
+    if isinstance(existing_value, str) and isinstance(new_value, str):
+        return existing_value.strip() != new_value.strip()
+    
+    # Handle JSON string fields (labels, assignees, etc.)
+    if isinstance(existing_value, str) and isinstance(new_value, str):
+        # For JSON fields, compare as strings after normalization
+        if existing_value.startswith('[') or existing_value.startswith('{'):
+            return existing_value != new_value
+    
+    # Standard comparison for other types
+    return existing_value != new_value
+
+
 def save_issue_to_database(issue: Issue):
     """
-    Save or update issue in database using proper upsert logic.
+    Save or update issue in database using proper upsert logic with diff optimization.
     
     Args:
         issue: Issue model instance
@@ -38,21 +101,23 @@ def save_issue_to_database(issue: Issue):
         existing_issue = table.get(issue.github_issue_id)
         
         if existing_issue:
-            # Update existing issue
-            logger.info(f"Updating existing issue #{issue.github_issue_number}: {issue.title}")
+            # Update existing issue with diff optimization
+            logger.info(f"Checking for changes in issue #{issue.github_issue_number}: {issue.title}")
             
-            # Convert issue object to dict for update
-            update_data = {}
-            for field_name in Issue.model_fields:
-                if field_name != 'github_issue_id':  # Don't update primary key
-                    value = getattr(issue, field_name)
-                    update_data[field_name] = value
+            # Get only changed fields
+            changed_fields = diff_and_get_changed_fields(existing_issue, issue)
             
-            table.update(
-                update_data,
-                {"github_issue_id": issue.github_issue_id}
-            )
-            logger.info(f"Updated issue #{issue.github_issue_number} successfully")
+            if changed_fields:
+                logger.info(f"Updating {len(changed_fields)} changed fields for issue #{issue.github_issue_number}")
+                logger.debug(f"Changed fields: {list(changed_fields.keys())}")
+                
+                table.update(
+                    changed_fields,
+                    {"github_issue_id": issue.github_issue_id}
+                )
+                logger.info(f"Updated issue #{issue.github_issue_number} successfully")
+            else:
+                logger.info(f"No changes detected for issue #{issue.github_issue_number}, skipping update")
         else:
             # Insert new issue
             logger.info(f"Inserting new issue #{issue.github_issue_number}: {issue.title}")
