@@ -175,3 +175,5 @@ pyrightconfig.json
 
 .DS_Store
 gaby
+
+*.pem
