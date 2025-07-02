@@ -5,7 +5,7 @@ from github_webhook import Webhook
 from backend import config
 from backend.model.issue import ISSUE_TABLE_NAME, Issue
 from backend.model.init_database import diff_and_get_changed_fields, PROTECTED_FIELDS
-from backend.tool.send_issue_comment import search_similar_issues, log_similar_issues
+from backend.tool.send_issue_comment import search_similar_issues, log_similar_issues, send_issue_comment, should_send_comment
 
 logger = get_logger(__name__)
 
@@ -55,6 +55,10 @@ def init_webhook(app):
                 # Don't fail the webhook if similarity search fails
             
             logger.info(f"Successfully processed {action} event for issue #{issue.github_issue_number}")
+            
+            # Send comment to issue
+            if should_send_comment(action, issue, similar_issues):
+                send_issue_comment(issue, similar_issues)
             
         except Exception as e:
             logger.error(f"Error processing Issues webhook: {str(e)}")
