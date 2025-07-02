@@ -1809,13 +1809,13 @@ cli = ["click (>=5.0)"]
 
 [[package]]
 name = "pytidb"
-version = "0.0.7"
+version = "0.0.8.post2"
 description = "A Python library for TiDB."
 optional = false
 python-versions = ">=3.10"
 files = [
-    {file = "pytidb-0.0.7-py3-none-any.whl", hash = "sha256:ee179bee7aaedf6aef88e8e8885cf5617adaa6b9aeb1a3b02b23b62a4d5dd45d"},
-    {file = "pytidb-0.0.7.tar.gz", hash = "sha256:7850138ccfa7b79797a848c635916bc87e6cd39b125b9e71f586065cd00822d4"},
+    {file = "pytidb-0.0.8.post2-py3-none-any.whl", hash = "sha256:f7e8320a6015cabe4a7e88009e9f39117783ff80389a9a57058f930614f053df"},
+    {file = "pytidb-0.0.8.post2.tar.gz", hash = "sha256:33cce63af9273f8d7e50a50d217b04665547de31778cfa430e39ba21b263d172"},
 ]
 
 [package.dependencies]
@@ -2709,4 +2709,4 @@ type = ["pytest-mypy"]
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.11"
-content-hash = "68384d5618e253cb7fae6bf60e77884025c1022bd516986756da65406f5f5126"
+content-hash = "51bb73362271dbee326ad88a22c5aac8e9a23a553b1da85b4a466bc1837394e4"

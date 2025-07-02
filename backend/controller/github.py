@@ -5,6 +5,7 @@ from github_webhook import Webhook
 from backend import config
 from backend.model.issue import ISSUE_TABLE_NAME, Issue
 from backend.model.init_database import diff_and_get_changed_fields, PROTECTED_FIELDS
+from backend.tool.send_issue_comment import search_similar_issues, log_similar_issues
 
 logger = get_logger(__name__)
 
@@ -41,7 +42,17 @@ def init_webhook(app):
                 assignees = issue.get_assignees_list()
                 logger.info(f"Assignees: {[assignee['login'] for assignee in assignees]}")
             
+            # Save issue to database first
             save_issue_to_database(issue, action)
+            
+            # Perform semantic search for similar issues
+            try:
+                logger.info(f"Searching for similar issues to #{issue.github_issue_number}")
+                similar_issues = search_similar_issues(issue, limit_per_field=5)
+                log_similar_issues(similar_issues, issue)
+            except Exception as e:
+                logger.error(f"Error during similarity search for issue #{issue.github_issue_number}: {str(e)}")
+                # Don't fail the webhook if similarity search fails
             
             logger.info(f"Successfully processed {action} event for issue #{issue.github_issue_number}")
             
