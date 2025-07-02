@@ -13,4 +13,6 @@ db = TiDBClient.connect(
     password=config.SERVERLESS_CLUSTER_PASSWORD,
     database=config.SERVERLESS_CLUSTER_DATABASE_NAME,
     enable_ssl=True,
+    pool_recycle=300,
+    pool_pre_ping=True,
 )
