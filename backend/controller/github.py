@@ -45,6 +45,14 @@ def init_webhook(app):
             # Save issue to database first
             save_issue_to_database(issue, action)
             
+            # Skip if not replay all and issue title doesn't start with replay prefix
+            logger.info(f"REPLAY_ALL: {config.REPLAY_ALL}")
+            logger.info(f"REPLAY_PREFIX: {config.REPLAY_PREFIX}")
+            logger.info(f"issue.title: {issue.title}")
+            if not config.REPLAY_ALL and not issue.title.startswith(config.REPLAY_PREFIX):
+                logger.info(f"Skipping replay for issue #{issue.github_issue_number} because REPLAY_ALL is false")
+                return {'status': 'success', 'message': 'Issue skipped (not marked for replay)'}, HTTPStatus.OK
+
             # Perform semantic search for similar issues
             try:
                 logger.info(f"Searching for similar issues to #{issue.github_issue_number}")
