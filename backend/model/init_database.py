@@ -4,7 +4,7 @@ import sys
 from backend.model.issue import ISSUE_TABLE_NAME, Issue
 from backend.model.base import db
 from backend.tool.logger import get_logger
-from backend.tool.get_issues import ISSUES_PER_PAGE, list_all_issues, get_issues_page
+from backend.tool.get_issues import ISSUES_PER_PAGE, list_all_issues, get_issues_page, get_issues_since
 from backend import config
 
 logger = get_logger(__name__)
@@ -131,40 +131,48 @@ def save_issue_to_database(issue: Issue):
 
 def fetch_and_save_all_issues():
     """
-    Fetch all issues from GitHub repository and save them to database using pagination.
+    Fetch all issues from GitHub repository and save them to database using since-based pagination.
     This function is idempotent - can be run multiple times safely.
     """
     if not config.GITHUB_REPO_NAME:
         raise ValueError("GITHUB_REPO_NAME is not configured")
     
-    logger.info(f"Fetching all issues from repository: {config.GITHUB_REPO_NAME} page by page")
+    logger.info(f"Fetching all issues from repository: {config.GITHUB_REPO_NAME} using since-based pagination")
     
     try:
-        # Process issues page by page until no more pages
+        # Process issues using since-based pagination
         processed_count = 0
         error_count = 0
-        page_num = 0
+        batch_num = 0
+        since_datetime = None  # Start from the beginning
         
         while True:
-            logger.info(f"Processing page {page_num + 1}")
+            batch_num += 1
+            logger.info(f"Processing batch {batch_num} (since: {since_datetime})")
             
             try:
-                # Get issues for current page
-                page_issues = get_issues_page(
+                # Get issues since the last datetime
+                issues_paginated = get_issues_since(
                     config.GITHUB_REPO_NAME, 
                     state="all", 
-                    page=page_num
+                    since=since_datetime
                 )
                 
-                # If no issues in this page, we're done
-                if not page_issues:
-                    logger.info(f"No more issues found at page {page_num + 1}, stopping")
+                # Convert to list to get the batch (GitHub's per_page default is usually 30-100)
+                batch_issues = list(issues_paginated[:ISSUES_PER_PAGE])
+                
+                # If no issues in this batch, we're done
+                if not batch_issues:
+                    logger.info(f"No more issues found in batch {batch_num}, stopping")
                     break
                 
-                logger.info(f"Processing {len(page_issues)} issues from page {page_num + 1}")
+                logger.info(f"Processing {len(batch_issues)} issues from batch {batch_num}")
                 
-                # Process each issue in the current page
-                for github_issue in page_issues:
+                # Track the latest updated_at time for next iteration
+                latest_updated_at = None
+                
+                # Process each issue in the current batch
+                for github_issue in batch_issues:
                     try:
                         # Convert PyGithub Issue to our Issue model
                         issue = Issue.from_github_issue(github_issue)
@@ -173,6 +181,10 @@ def fetch_and_save_all_issues():
                         save_issue_to_database(issue)
                         processed_count += 1
                         
+                        # Track the latest updated_at for pagination
+                        if latest_updated_at is None or github_issue.updated_at > latest_updated_at:
+                            latest_updated_at = github_issue.updated_at
+                        
                         logger.debug(f"Processed issue #{issue.github_issue_number}: {issue.title}")
                         
                     except Exception as e:
@@ -180,20 +192,22 @@ def fetch_and_save_all_issues():
                         logger.error(f"Error processing issue #{github_issue.number}: {str(e)}")
                         continue
                 
-                logger.info(f"Completed page {page_num + 1}. Total processed so far: {processed_count} issues")
-                page_num += 1
+                # Update since_datetime for next iteration
+                # Add 1 second to avoid getting the same issue again
+                if latest_updated_at:
+                    import datetime
+                    since_datetime = latest_updated_at + datetime.timedelta(seconds=1)
+                
+                logger.info(f"Completed batch {batch_num}. Total processed so far: {processed_count} issues")
+                logger.info(f"Next batch will start from: {since_datetime}")
                 
             except Exception as e:
-                logger.error(f"Error processing page {page_num + 1}: {str(e)}")
-                # Try next page anyway
-                page_num += 1
-                # But stop if we've tried too many pages without success
-                if page_num > 10000:  # Safety limit
-                    logger.error("Reached maximum page limit, stopping")
-                    break
-                continue
+                logger.error(f"Error processing batch {batch_num}: {str(e)}")
+                # For since-based pagination, we should stop on error as we can't continue safely
+                logger.error("Stopping due to batch processing error")
+                break
         
-        logger.info(f"Issue processing completed: {processed_count} successful, {error_count} errors across {page_num} pages")
+        logger.info(f"Issue processing completed: {processed_count} successful, {error_count} errors across {batch_num} batches")
         
         if processed_count == 0:
             logger.warning("No issues were processed. This might indicate a permissions or configuration issue.")

@@ -73,6 +73,7 @@ def list_all_issues(repo_name: str, state: str = "all"):
 def get_issues_page(repo_name: str, state: str = "all", page: int = 0):
     """
     Get a specific page of issues from the repository.
+    Note: This function is deprecated for large datasets. Use get_issues_since instead.
 
     Args:
         repo_name: Repository name
@@ -91,3 +92,40 @@ def get_issues_page(repo_name: str, state: str = "all", page: int = 0):
     
     # Get the specific page
     return issues.get_page(page)
+
+
+def get_issues_since(repo_name: str, state: str = "all", since=None):
+    """
+    Get issues from the repository since a specific datetime.
+    This uses cursor-based pagination which works for large datasets.
+
+    Args:
+        repo_name: Repository name
+        state: State of the issues to list ('open', 'closed', 'all')
+        since: datetime object to get issues updated since this time. If None, gets all issues.
+
+    Returns:
+        PaginatedList of issues
+    """
+    if not repo_name:
+        raise ValueError("Repository name is required. Please set GITHUB_REPO_NAME environment variable.")
+    
+    g = get_github_client()
+    repo = g.get_repo(repo_name)
+    
+    # Use since parameter for cursor-based pagination
+    if since:
+        issues = repo.get_issues(
+            state=state,
+            since=since,
+            sort="updated",
+            direction="asc"
+        )
+    else:
+        issues = repo.get_issues(
+            state=state,
+            sort="updated",
+            direction="asc"
+        )
+    
+    return issues
