@@ -4,7 +4,7 @@ import sys
 from backend.model.issue import ISSUE_TABLE_NAME, Issue
 from backend.model.base import db
 from backend.tool.logger import get_logger
-from backend.tool.get_issues import list_all_issues
+from backend.tool.get_issues import ISSUES_PER_PAGE, list_all_issues, get_issues_page
 from backend import config
 
 logger = get_logger(__name__)
@@ -131,46 +131,72 @@ def save_issue_to_database(issue: Issue):
 
 def fetch_and_save_all_issues():
     """
-    Fetch all issues from GitHub repository and save them to database.
+    Fetch all issues from GitHub repository and save them to database using pagination.
     This function is idempotent - can be run multiple times safely.
     """
     if not config.GITHUB_REPO_NAME:
         raise ValueError("GITHUB_REPO_NAME is not configured")
     
-    logger.info(f"Fetching all issues from repository: {config.GITHUB_REPO_NAME}")
+    logger.info(f"Fetching all issues from repository: {config.GITHUB_REPO_NAME} page by page")
     
     try:
-        # Get all issues from GitHub (both open and closed)
-        issues = list_all_issues(config.GITHUB_REPO_NAME, state="all")
-        issues_list = list(issues)  # Convert generator to list
-        
-        logger.info(f"Found {len(issues_list)} issues to process")
-        
-        if not issues_list:
-            logger.info("No issues found in repository")
-            return
-        
-        # Process each issue
+        # Process issues page by page until no more pages
         processed_count = 0
         error_count = 0
+        page_num = 0
         
-        for github_issue in issues_list:
+        while True:
+            logger.info(f"Processing page {page_num + 1}")
+            
             try:
-                # Convert PyGithub Issue to our Issue model
-                issue = Issue.from_github_issue(github_issue)
+                # Get issues for current page
+                page_issues = get_issues_page(
+                    config.GITHUB_REPO_NAME, 
+                    state="all", 
+                    page=page_num
+                )
                 
-                # Save to database
-                save_issue_to_database(issue)
-                processed_count += 1
+                # If no issues in this page, we're done
+                if not page_issues:
+                    logger.info(f"No more issues found at page {page_num + 1}, stopping")
+                    break
                 
-                logger.debug(f"Processed issue #{issue.github_issue_number}: {issue.title}")
+                logger.info(f"Processing {len(page_issues)} issues from page {page_num + 1}")
+                
+                # Process each issue in the current page
+                for github_issue in page_issues:
+                    try:
+                        # Convert PyGithub Issue to our Issue model
+                        issue = Issue.from_github_issue(github_issue)
+                        
+                        # Save to database
+                        save_issue_to_database(issue)
+                        processed_count += 1
+                        
+                        logger.debug(f"Processed issue #{issue.github_issue_number}: {issue.title}")
+                        
+                    except Exception as e:
+                        error_count += 1
+                        logger.error(f"Error processing issue #{github_issue.number}: {str(e)}")
+                        continue
+                
+                logger.info(f"Completed page {page_num + 1}. Total processed so far: {processed_count} issues")
+                page_num += 1
                 
             except Exception as e:
-                error_count += 1
-                logger.error(f"Error processing issue #{github_issue.number}: {str(e)}")
+                logger.error(f"Error processing page {page_num + 1}: {str(e)}")
+                # Try next page anyway
+                page_num += 1
+                # But stop if we've tried too many pages without success
+                if page_num > 10000:  # Safety limit
+                    logger.error("Reached maximum page limit, stopping")
+                    break
                 continue
         
-        logger.info(f"Issue processing completed: {processed_count} successful, {error_count} errors")
+        logger.info(f"Issue processing completed: {processed_count} successful, {error_count} errors across {page_num} pages")
+        
+        if processed_count == 0:
+            logger.warning("No issues were processed. This might indicate a permissions or configuration issue.")
         
     except Exception as e:
         logger.error(f"Error fetching issues from GitHub: {str(e)}")
@@ -181,6 +207,9 @@ def init_database():
     """
     Initialize database tables and populate with existing GitHub issues.
     This function is idempotent and can be run multiple times safely.
+    
+    Args:
+        page_size: Number of issues to process per page (default: 10)
     """
     logger.info("Initializing database")
     

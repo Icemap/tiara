@@ -3,6 +3,7 @@ import sys
 import os
 from backend import config
 
+ISSUES_PER_PAGE = 100
 
 def create_github_app_token(app_id: str, private_key: str, installation_id: str):
     """
@@ -43,7 +44,7 @@ def get_github_client():
             config.GITHUB_APP_PRIVATE_KEY,
             config.GITHUB_APP_INSTALLATION_ID
         )
-        return Github(token)
+        return Github(token, per_page=ISSUES_PER_PAGE)
     
     raise ValueError("No valid GitHub authentication method found.")
 
@@ -57,7 +58,7 @@ def list_all_issues(repo_name: str, state: str = "all"):
         state: State of the issues to list
 
     Returns:
-        List of issues
+        PaginatedList of issues (not converted to list)
     """
     if not repo_name:
         raise ValueError("Repository name is required. Please set GITHUB_REPO_NAME environment variable.")
@@ -69,45 +70,24 @@ def list_all_issues(repo_name: str, state: str = "all"):
     return issues
 
 
-if __name__ == '__main__':
-    try:
-        from backend import config
-        
-        # Check if repository name is configured
-        if not config.GITHUB_REPO_NAME:
-            print("Error: GITHUB_REPO_NAME environment variable is not set.")
-            print("Please set it in your .env file or environment variables.")
-            print("Example: GITHUB_REPO_NAME=username/repository-name")
-            sys.exit(1)
-        
-        # Check authentication configuration
-        has_github_app = (config.GITHUB_APP_ID and 
-                         config.GITHUB_APP_PRIVATE_KEY and 
-                         config.GITHUB_APP_INSTALLATION_ID)
-        
-        if not has_github_app:
-            print("Error: No GitHub authentication configured.")
-            print("\nFor GitHub App authentication, set these environment variables:")
-            print("- GITHUB_APP_ID: Your GitHub App ID")
-            print("- GITHUB_APP_PRIVATE_KEY: Path to private key file or key content")
-            print("- GITHUB_APP_INSTALLATION_ID: Installation ID for your repository")
-            sys.exit(1)
-        
-        print(f"Fetching issues from repository: {config.GITHUB_REPO_NAME}")
-        issues = list_all_issues(config.GITHUB_REPO_NAME, state="all")
-        
-        for issue in issues:
-            print("------------------------")
-            print(f"#{issue.number} [{issue.state}] {issue.title}")
-            print("------------------------")
-        
-        print(f"\nSummary: {len(issues)} issues")
-        
-    except ImportError as e:
-        print(f"Import error: {e}")
-        print("Make sure to run this script from the project root directory using:")
-        print("python -m backend.tool.get_issues")
-        sys.exit(1)
-    except Exception as e:
-        print(f"Error: {e}")
-        sys.exit(1)
+def get_issues_page(repo_name: str, state: str = "all", page: int = 0):
+    """
+    Get a specific page of issues from the repository.
+
+    Args:
+        repo_name: Repository name
+        state: State of the issues to list ('open', 'closed', 'all')
+        page: Page number to fetch (0-based index)
+
+    Returns:
+        List of issues for the specific page
+    """
+    if not repo_name:
+        raise ValueError("Repository name is required. Please set GITHUB_REPO_NAME environment variable.")
+    
+    g = get_github_client()
+    repo = g.get_repo(repo_name)
+    issues = repo.get_issues(state=state)
+    
+    # Get the specific page
+    return issues.get_page(page)
