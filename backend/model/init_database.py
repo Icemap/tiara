@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import sys
+from datetime import datetime
 from backend.model.issue import ISSUE_TABLE_NAME, Issue
 from backend.model.base import db
 from backend.tool.logger import get_logger
@@ -129,33 +130,39 @@ def save_issue_to_database(issue: Issue):
         raise
 
 
-def fetch_and_save_all_issues():
+def fetch_and_save_all_issues(since_datetime=None):
     """
     Fetch all issues from GitHub repository and save them to database using since-based pagination.
     This function is idempotent - can be run multiple times safely.
+    
+    Args:
+        since_datetime: Optional datetime to start fetching from. If None, starts from beginning.
     """
     if not config.GITHUB_REPO_NAME:
         raise ValueError("GITHUB_REPO_NAME is not configured")
     
-    logger.info(f"Fetching all issues from repository: {config.GITHUB_REPO_NAME} using since-based pagination")
+    if since_datetime:
+        logger.info(f"Fetching all issues from repository: {config.GITHUB_REPO_NAME} using since-based pagination (starting from: {since_datetime})")
+    else:
+        logger.info(f"Fetching all issues from repository: {config.GITHUB_REPO_NAME} using since-based pagination")
     
     try:
         # Process issues using since-based pagination
         processed_count = 0
         error_count = 0
         batch_num = 0
-        since_datetime = None  # Start from the beginning
+        current_since_datetime = since_datetime  # Use the provided starting datetime
         
         while True:
             batch_num += 1
-            logger.info(f"Processing batch {batch_num} (since: {since_datetime})")
+            logger.info(f"Processing batch {batch_num} (since: {current_since_datetime})")
             
             try:
                 # Get issues since the last datetime
                 issues_paginated = get_issues_since(
                     config.GITHUB_REPO_NAME, 
                     state="all", 
-                    since=since_datetime
+                    since=current_since_datetime
                 )
                 
                 # Convert to list to get the batch (GitHub's per_page default is usually 30-100)
@@ -192,14 +199,14 @@ def fetch_and_save_all_issues():
                         logger.error(f"Error processing issue #{github_issue.number}: {str(e)}")
                         continue
                 
-                # Update since_datetime for next iteration
+                # Update current_since_datetime for next iteration
                 # Add 1 second to avoid getting the same issue again
                 if latest_updated_at:
                     import datetime
-                    since_datetime = latest_updated_at + datetime.timedelta(seconds=1)
+                    current_since_datetime = latest_updated_at + datetime.timedelta(seconds=1)
                 
                 logger.info(f"Completed batch {batch_num}. Total processed so far: {processed_count} issues")
-                logger.info(f"Next batch will start from: {since_datetime}")
+                logger.info(f"Next batch will start from: {current_since_datetime}")
                 
             except Exception as e:
                 logger.error(f"Error processing batch {batch_num}: {str(e)}")
@@ -217,13 +224,13 @@ def fetch_and_save_all_issues():
         raise
 
 
-def init_database():
+def init_database(since_datetime=None):
     """
     Initialize database tables and populate with existing GitHub issues.
     This function is idempotent and can be run multiple times safely.
     
     Args:
-        page_size: Number of issues to process per page (default: 10)
+        since_datetime: Optional datetime to start fetching from. If None, starts from beginning.
     """
     logger.info("Initializing database")
     
@@ -232,8 +239,11 @@ def init_database():
         init_tables()
         
         # Step 2: Fetch and save all issues from GitHub
-        logger.info("Fetching and saving issues from GitHub")
-        fetch_and_save_all_issues()
+        if since_datetime:
+            logger.info(f"Fetching and saving issues from GitHub (starting from: {since_datetime})")
+        else:
+            logger.info("Fetching and saving issues from GitHub")
+        fetch_and_save_all_issues(since_datetime=since_datetime)
         
         logger.info("Database initialization completed successfully")
         
@@ -245,7 +255,9 @@ def init_database():
 if __name__ == '__main__':
     """
     Standalone script to initialize database with GitHub issues.
-    Usage: python -m backend.model.init_database
+    Usage: 
+        python -m backend.model.init_database
+        python -m backend.model.init_database "2025-07-03 12:35:33"
     """
     try:
         logger.info("Starting database initialization script")
@@ -265,8 +277,20 @@ if __name__ == '__main__':
             logger.error("Please set GITHUB_APP_ID, GITHUB_APP_PRIVATE_KEY, and GITHUB_APP_INSTALLATION_ID")
             sys.exit(1)
         
+        # Parse since_datetime if provided
+        since_datetime = None
+        if len(sys.argv) > 1:
+            datetime_str = sys.argv[1]
+            try:
+                since_datetime = datetime.strptime(datetime_str, "%Y-%m-%d %H:%M:%S")
+                logger.info(f"Starting from datetime: {since_datetime}")
+            except ValueError as e:
+                logger.error(f"Invalid datetime format: {datetime_str}. Expected format: YYYY-MM-DD HH:MM:SS")
+                logger.error(f"Example: 2025-07-03 12:35:33")
+                sys.exit(1)
+        
         # Run initialization
-        init_database()
+        init_database(since_datetime=since_datetime)
         
         logger.info("Database initialization script completed successfully")
         
