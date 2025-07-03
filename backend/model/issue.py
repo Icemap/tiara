@@ -3,7 +3,7 @@ from typing import Any, Optional
 from datetime import datetime
 from pytidb.schema import TableModel, Field
 from pytidb.embeddings import EmbeddingFunction
-from sqlalchemy import Column, BigInteger
+from sqlalchemy import JSON, TEXT, Column, BigInteger
 
 from backend import config
 
@@ -32,8 +32,8 @@ class Issue(TableModel, table=True):
     repository_id: int  # GitHub repository ID
     
     # Issue content
-    title: str  # Issue title
-    body: Optional[str] = None  # Issue body/description (can be None)
+    title: str = Field(sa_column=Column(TEXT, nullable=False))  # Issue title
+    body: Optional[str] = Field(sa_column=Column(TEXT, nullable=True))  # Issue body/description (can be None)
     
     # Issue status
     state: str = Field(index=True)  # Issue state (open/closed)
@@ -48,8 +48,8 @@ class Issue(TableModel, table=True):
     closed_by_id: Optional[int] = None  # ID of who closed the issue
     
     # Assignees and labels (JSON storage)
-    assignees: Optional[str] = None  # JSON string of assignee data
-    labels: Optional[str] = None  # JSON string of label data
+    assignees: Optional[dict | list] = Field(sa_column=Column(JSON, nullable=False))  # JSON string of assignee data
+    labels: Optional[dict | list] = Field(sa_column=Column(JSON, nullable=False))  # JSON string of label data
     
     # Milestone
     milestone_title: Optional[str] = None
@@ -132,8 +132,8 @@ class Issue(TableModel, table=True):
             author_id=github_issue.user.id,
             closed_by_login=closed_by_login,
             closed_by_id=closed_by_id,
-            assignees=json.dumps(assignees_data) if assignees_data else None,
-            labels=json.dumps(labels_data) if labels_data else None,
+            assignees=assignees_data,
+            labels=labels_data,
             milestone_title=milestone_title,
             milestone_id=milestone_id,
             created_at=github_issue.created_at,
@@ -212,8 +212,8 @@ class Issue(TableModel, table=True):
             author_id=issue_data.get('user', {}).get('id'),
             closed_by_login=closed_by_login,
             closed_by_id=closed_by_id,
-            assignees=json.dumps(assignees_data) if assignees_data else None,
-            labels=json.dumps(labels_data) if labels_data else None,
+            assignees=assignees_data,
+            labels=labels_data,
             milestone_title=milestone_title,
             milestone_id=milestone_id,
             created_at=parse_datetime(issue_data.get('created_at')),
