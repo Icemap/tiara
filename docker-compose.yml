@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  tiara-backend:
+    image: cheesewang/tiara:latest
+    expose:
+      - "80:5000"
+    env_file:
+      - .env
+    volumes:
+      - ./certs:/app/certs:ro
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:5000 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    restart: on-failure
