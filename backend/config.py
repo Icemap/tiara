@@ -7,7 +7,7 @@ DEBUG: bool = os.getenv("DEBUG", "false").lower() in ("true", "1", "yes")
 # SECRET_KEY: str = os.getenv("SECRET_KEY")
 
 REPLAY_ALL: bool = os.getenv("REPLAY_ALL", "false").lower() in ("true", "1", "yes")
-REPLAY_PREFIX: str = os.getenv("REPLAY_PREFIX", default="tiara:")
+REPLAY_LABEL: str = os.getenv("REPLAY_LABEL", default="tiara")
 
 SERVERLESS_CLUSTER_HOST: str = os.getenv("SERVERLESS_CLUSTER_HOST")
 SERVERLESS_CLUSTER_PORT: int = int(os.getenv("SERVERLESS_CLUSTER_PORT"))

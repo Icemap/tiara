@@ -34,9 +34,11 @@ def init_webhook(app):
             logger.info(f"Author: {issue.author_login}")
             logger.info(f"State: {issue.state}")
             
+            label_names = []
             if issue.labels:
                 labels = issue.get_labels_list()
-                logger.info(f"Labels: {[label['name'] for label in labels]}")
+                label_names = [label['name'] for label in labels]
+                logger.info(f"Labels: {label_names}")
             
             if issue.assignees:
                 assignees = issue.get_assignees_list()
@@ -45,11 +47,9 @@ def init_webhook(app):
             # Save issue to database first
             save_issue_to_database(issue, action)
             
-            # Skip if not replay all and issue title doesn't start with replay prefix
+            # Skip if not replay all and issue label doesn't contain replay label
             logger.info(f"REPLAY_ALL: {config.REPLAY_ALL}")
-            logger.info(f"REPLAY_PREFIX: {config.REPLAY_PREFIX}")
-            logger.info(f"issue.title: {issue.title}")
-            if not config.REPLAY_ALL and not issue.title.startswith(config.REPLAY_PREFIX):
+            if not config.REPLAY_ALL and not config.REPLAY_LABEL in label_names:
                 logger.info(f"Skipping replay for issue #{issue.github_issue_number} because REPLAY_ALL is false")
                 return {'status': 'success', 'message': 'Issue skipped (not marked for replay)'}, HTTPStatus.OK
 
