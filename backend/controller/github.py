@@ -45,13 +45,12 @@ def init_webhook(app):
                 logger.info(f"Assignees: {[assignee['login'] for assignee in assignees]}")
             
             # Save issue to database first
-            save_issue_to_database(issue, action)
+            should_reply = save_issue_to_database(issue, action)
             
-            # Skip if not replay all and issue label doesn't contain replay label
-            logger.info(f"REPLAY_ALL: {config.REPLAY_ALL}")
-            if not config.REPLAY_ALL and not config.REPLAY_LABEL in label_names:
-                logger.info(f"Skipping replay for issue #{issue.github_issue_number} because REPLAY_ALL is false")
-                return {'status': 'success', 'message': 'Issue skipped (not marked for replay)'}, HTTPStatus.OK
+            # Skip if not reply all and issue label doesn't contain reply label
+            if not should_reply:
+                logger.info(f"Skipping reply for issue #{issue.github_issue_number}")
+                return {'status': 'success', 'message': 'Issue skipped (not marked for reply)'}, HTTPStatus.OK
 
             # Perform semantic search for similar issues
             try:
@@ -82,19 +81,39 @@ def save_issue_to_database(issue: Issue, action: str):
     Args:
         issue: Issue model instance
         action: The webhook action (opened, edited, closed, etc.)
+    Returns:
+        bool: Whether the REPLY_LABEL is present (on creation) or newly added (on update), indicating the bot should reply.
     """
     logger.info(f"Saving issue to database: {issue.github_issue_id} (action: {action})")
 
     table = base.db.open_table(ISSUE_TABLE_NAME)
+    
+    # Indicates whether the bot should reply for this issue event
+    should_reply = False
     
     try:
         if action == 'opened':
             # Insert new issue
             table.insert(issue)
             logger.info(f"Inserted new issue #{issue.github_issue_number}")
+            
+            # Determine if the REPLY_LABEL is present on newly opened issues
+            labels_list = issue.get_labels_list() if issue.labels else []
+            if any(label.get('name') == config.REPLY_LABEL for label in labels_list):
+                should_reply = True
         else:
             # Update existing issue with diff optimization
             existing_issue = table.get(issue.github_issue_id)
+            
+            # Determine if the REPLY_LABEL was newly added before any field update logic
+            current_has_reply = False
+            if issue.labels:
+                current_has_reply = any(label.get('name') == config.REPLY_LABEL for label in issue.get_labels_list())
+            db_has_reply = False
+            if existing_issue and getattr(existing_issue, 'labels', None):
+                db_has_reply = any(label.get('name') == config.REPLY_LABEL for label in existing_issue.get_labels_list())
+            if current_has_reply and not db_has_reply:
+                should_reply = True
             
             if existing_issue:
                 logger.info(f"Checking for changes in issue #{issue.github_issue_number} (action: {action})")
@@ -121,3 +140,5 @@ def save_issue_to_database(issue: Issue, action: str):
     except Exception as e:
         logger.error(f"Error saving issue #{issue.github_issue_number}: {str(e)}")
         raise
+
+    return should_reply

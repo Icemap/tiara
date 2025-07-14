@@ -1,8 +1,10 @@
 from . import root
 from . import github
+from . import issues
 
 BPS = [
     ('/', root.bp),
+    ('/issues', issues.bp),
 ]
 
 def init_routes(app):
