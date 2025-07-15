@@ -6,65 +6,65 @@ A Flask-based service that provides GitHub issue tracking and webhook handling c
 
 ## How to Deploy
 
-### 1. Prerequsites
+### 1. Prerequisites
 
 - A GitHub Repository
 - A Server with:
   - Docker
-  - Docker compose
+  - Docker Compose
 
-### 2. Create an App in GitHub
+### 2. Create a GitHub App
 
-1. Enter [Developer Settings](https://github.com/settings/apps) in GitHub.
-2. Click **New GitHub App** button, or click [here](https://github.com/settings/apps/new) directly.
-3. Enter:
+1. Go to [Developer Settings](https://github.com/settings/apps) in GitHub.
+2. Click the **New GitHub App** button, or click [here](https://github.com/settings/apps/new) directly.
+3. Fill in the following information:
 
-    - GitHub App name: A representative application name
-    - Homepage URL: A homepage URL of this application
-    - Webhook - Webhook URL: Write this URL to the place that your tiara will be deployed
-    - Webhook - Secret: A random string that we need to configure into tiara
-    - Permissions: Click and expand the **Repository permissions**:
+    - **GitHub App name**: A descriptive application name
+    - **Homepage URL**: The homepage URL for this application
+    - **Webhook URL**: The URL where your Tiara instance will be deployed
+    - **Webhook Secret**: A random string that you'll need to configure in Tiara
+    - **Permissions**: Expand the **Repository permissions** section:
 
-        - Permissions - Repository permissions - Issues: Change the access to **Read and write**.
-        - Permissions - Repository permissions - Metadata: This section will be selected automaticaly.
+        - **Repository permissions - Issues**: Set access to **Read and write**
+        - **Repository permissions - Metadata**: This will be selected automatically
 
-    - Subscribe to events: Check the **Issues** option.
-    - Where can this GitHub App be installed?:
+    - **Subscribe to events**: Check the **Issues** option
+    - **Where can this GitHub App be installed?**:
 
-        - Only on this account: If you only want to install it to you own GitHub account, you can select this option.
-        - Any account: if you want to install it to some other organization, etc. You need to select this option.
+        - **Only on this account**: Select this if you only want to install it on your own GitHub account
+        - **Any account**: Select this if you want to install it on other organizations
 
-4. Click **Create GitHub App** button.
-5. After creation, you can see the **App ID** in the General tab.
+4. Click the **Create GitHub App** button.
+5. After creation, you can find the **App ID** in the General tab.
 
     ![App ID](https://lab-static.pingcap.com/images/2025/7/14/f7aebeba1cab8a42f3095e96a653769bf951b3db.png)
 
 ### 3. Download the Private Key
 
-1. Scoll down until the **Private keys** section in the General tab.
-2. Click **Generate a private key** and save the key with a ".pem" suffix.
+1. Scroll down to the **Private keys** section in the General tab.
+2. Click **Generate a private key** and save the key with a ".pem" extension.
 
-### 4. Install this GitHub App
+### 4. Install the GitHub App
 
-1. Click the **Install App** tab at the left-bottom side.
-2. Click **Install** button that behind the organization that you want to install.
-3. Switch to **Only select repositories** and select <u>ONLY ONE</u> repository.
-4. Then, click **Install**.
-5. After the installation, you can get the GITHUB_APP_INSTALLATION_ID on the URL of the installed page.
+1. Click the **Install App** tab on the left side.
+2. Click the **Install** button next to the organization where you want to install the app.
+3. Select **Only select repositories** and choose <u>ONLY ONE</u> repository.
+4. Click **Install**.
+5. After installation, you can get the `GITHUB_APP_INSTALLATION_ID` from the URL of the installation page.
 
     ![App Installation ID](https://lab-static.pingcap.com/images/2025/7/14/40250231d836172d34bec7c15a9309b4ba71342e.png)
 
-#### 5. Deploy Service
+### 5. Deploy the Service
 
-1. Login to your server with docker and docker compose environment
-2. Clone this repository and enter the folder:
+1. Log in to your server with Docker and Docker Compose installed.
+2. Clone this repository and navigate to the folder:
 
     ```bash
     git clone https://github.com/Icemap/tiara.git
     cd tiara
     ```
 
-3. Save your pem private key in the `certs` folder.
+3. Save your ".pem" private key in the `certs` folder.
 4. Create a `.env` file with the following configuration:
 
     ```conf
@@ -78,11 +78,11 @@ A Flask-based service that provides GitHub issue tracking and webhook handling c
     SERVERLESS_CLUSTER_PASSWORD=<YOUR_TIDB_PASSWORD>
     SERVERLESS_CLUSTER_DATABASE_NAME='test'
 
-    # Embedding model and min related cosine distance
+    # Embedding model and minimum related cosine distance
     EMBEDDING_MODEL="bedrock/amazon.titan-embed-text-v2:0"
     MIN_DISTANCE=0.7
 
-    # AWS ACCESS KEY (if you are using 'bedrock' as the provider in EMBEDDING_MODEL)
+    # AWS Access Keys (required if using 'bedrock' as the provider in EMBEDDING_MODEL)
     AWS_ACCESS_KEY_ID=<AWS_ACCESS_KEY_ID>
     AWS_SECRET_ACCESS_KEY=<AWS_SECRET_ACCESS_KEY>
 
@@ -98,9 +98,9 @@ A Flask-based service that provides GitHub issue tracking and webhook handling c
 
 > **Note:**
 >
-> If you are not sure about the GitHub's parameters, please recheck the previous steps.
+> If you're unsure about the GitHub parameters, please review the previous steps.
 
-#### 6. Database Initialization
+### 6. Database Initialization
 
 Initialize the database and fetch existing GitHub issues:
 
@@ -110,15 +110,15 @@ docker compose run tiara-backend /bin/sh -c "poetry run python -m backend.model.
 
 This command will:
 
-- Create necessary database tables
+- Create the necessary database tables
 - Fetch all existing issues from your GitHub repository
 - Save them to the TiDB database
 - Can be run multiple times safely (idempotent)
 
-#### 7. Start the Docker Compose Service
+### 7. Start the Docker Compose Service
 
 ```bash
 docker compose up -d
 ```
 
-The service will be available at `http://localhost` the IP sets of the server.
+The service will be available at `http://localhost` or the IP address of your server.
