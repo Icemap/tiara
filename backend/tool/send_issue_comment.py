@@ -10,7 +10,7 @@ from backend import config
 logger = get_logger(__name__)
 
 
-def search_similar_issues(issue: Issue, limit_per_field: int = 5) -> List[Dict]:
+def search_similar_issues(issue: Issue, limit_per_field: int = 10) -> List[Dict]:
     """
     Search for similar issues using semantic vector search on title and body.
     
@@ -36,6 +36,7 @@ def search_similar_issues(issue: Issue, limit_per_field: int = 5) -> List[Dict]:
             
             for result in title_results:
                 result['_search_field'] = 'title_vec'
+                result['_state'] = issue.state
                 all_results.append(result)
             
             logger.debug(f"Found {len(title_results)} similar issues by title")
@@ -47,6 +48,7 @@ def search_similar_issues(issue: Issue, limit_per_field: int = 5) -> List[Dict]:
             
             for result in body_results:
                 result['_search_field'] = 'body_vec'
+                result['_state'] = issue.state
                 all_results.append(result)
             
             logger.debug(f"Found {len(body_results)} similar issues by body")

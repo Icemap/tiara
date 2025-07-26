@@ -31,7 +31,7 @@ def trigger_reply(issue_id: int):
         issue_model = Issue.from_github_issue(github_issue)
 
         # Perform semantic search for similar issues
-        similar_issues = search_similar_issues(issue_model, limit_per_field=5)
+        similar_issues = search_similar_issues(issue_model, limit_per_field=10)
         log_similar_issues(similar_issues, issue_model)
 
         # Always send the comment (bypass should_send_comment checks)
