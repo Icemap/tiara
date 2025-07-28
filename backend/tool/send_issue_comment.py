@@ -10,7 +10,7 @@ from backend import config
 logger = get_logger(__name__)
 
 
-def search_similar_issues(issue: Issue, limit_per_field: int = 5) -> List[Dict]:
+def search_similar_issues(issue: Issue, limit_per_field: int = 10) -> List[Dict]:
     """
     Search for similar issues using semantic vector search on title and body.
     
@@ -36,6 +36,7 @@ def search_similar_issues(issue: Issue, limit_per_field: int = 5) -> List[Dict]:
             
             for result in title_results:
                 result['_search_field'] = 'title_vec'
+                result['_state'] = issue.state
                 all_results.append(result)
             
             logger.debug(f"Found {len(title_results)} similar issues by title")
@@ -47,6 +48,7 @@ def search_similar_issues(issue: Issue, limit_per_field: int = 5) -> List[Dict]:
             
             for result in body_results:
                 result['_search_field'] = 'body_vec'
+                result['_state'] = issue.state
                 all_results.append(result)
             
             logger.debug(f"Found {len(body_results)} similar issues by body")
@@ -55,7 +57,7 @@ def search_similar_issues(issue: Issue, limit_per_field: int = 5) -> List[Dict]:
         deduplicated_results = _deduplicate_by_distance(all_results, issue.github_issue_id)
         
         # Sort by distance (ascending - smaller distance means more similar)
-        deduplicated_results.sort(key=lambda x: x.get('_distance', float('inf')))
+        deduplicated_results.sort(key=lambda x: (x.get('_state') != 'open', x.get('_state') == 'closed', x.get('_distance', float('inf'))))
         
         # Limit total results (title_vec + body_vec should each contribute up to limit_per_field)
         max_total_results = limit_per_field * 2
