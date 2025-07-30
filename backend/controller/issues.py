@@ -9,12 +9,40 @@ from backend.tool.send_issue_comment import (
     send_issue_comment,
 )
 from backend.model.issue import Issue
+from backend.model.init_database import save_issue_to_database
 from backend import config
 
 
 bp = Blueprint("issues", __name__)
 
 logger = get_logger(__name__)
+
+
+@bp.route("/fetch-issue/<int:issue_id>", methods=["POST"])
+def fetch_issue(issue_id: int):
+    try:
+        # Authenticate via GitHub App and fetch the repository
+        github_client = get_github_client()
+        repo = github_client.get_repo(config.GITHUB_REPO_NAME)
+
+        # Fetch the issue by number from GitHub
+        github_issue = repo.get_issue(issue_id)
+
+        # Convert PyGithub Issue to our internal Issue model
+        issue_model = Issue.from_github_issue(github_issue)
+
+        # Save the issue to database
+        save_issue_to_database(issue_model)
+
+        return {
+            'status': 'success',
+            'message': f'Issue #{issue_id} fetched and saved successfully',
+            'issue_title': issue_model.title
+        }, HTTPStatus.OK
+
+    except Exception as e:
+        logger.error(f"Failed to fetch and save issue #{issue_id}: {str(e)}")
+        return {'status': 'error', 'message': str(e)}, HTTPStatus.INTERNAL_SERVER_ERROR
 
 
 @bp.route("/trigger-reply/<int:issue_id>", methods=["POST"])
