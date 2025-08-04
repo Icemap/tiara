@@ -55,7 +55,7 @@ def init_webhook(app):
             # Perform semantic search for similar issues
             try:
                 logger.info(f"Searching for similar issues to #{issue.github_issue_number}")
-                similar_issues = search_similar_issues(issue, limit_per_field=10)
+                similar_issues = search_similar_issues(issue, limit_per_field=config.RETRIEVAL_LIMIT)
                 log_similar_issues(similar_issues, issue)
             except Exception as e:
                 logger.error(f"Error during similarity search for issue #{issue.github_issue_number}: {str(e)}")

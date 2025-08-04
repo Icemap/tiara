@@ -10,7 +10,7 @@ from backend import config
 logger = get_logger(__name__)
 
 
-def search_similar_issues(issue: Issue, limit_per_field: int = 10) -> List[Dict]:
+def search_similar_issues(issue: Issue, limit_per_field: int = config.RETRIEVAL_LIMIT) -> List[Dict]:
     """
     Search for similar issues using semantic vector search on title and body.
     
@@ -119,7 +119,7 @@ def log_similar_issues(similar_issues: List[Dict], current_issue: Issue):
     
     logger.info(f"Found {len(similar_issues)} similar issues for #{current_issue.github_issue_number}:")
     
-    for i, similar in enumerate(similar_issues[:5], 1):  # Log top 5
+    for i, similar in enumerate(similar_issues[:config.REPLY_LIMIT], 1):  # Log top 5
         issue_number = similar.get('github_issue_number', 'N/A')
         title = similar.get('title', 'N/A')
         distance = similar.get('_distance', 'N/A')
@@ -180,7 +180,7 @@ def _build_comment_content(similar_issues: List[Dict]) -> str:
     lines.append("I found some similar issues that might be related, please check them at first, if you think this issue is similar to them, please close this issue.")
     lines.append("")
     
-    for i, similar in enumerate(similar_issues[:5], 1):  # Limit to top 5
+    for i, similar in enumerate(similar_issues[:config.REPLY_LIMIT], 1):  # Limit to top 5
         html_url = similar.get('html_url', '#')
         distance = similar.get('_distance', 0)
         search_field = similar.get('_search_field', 'unknown')
