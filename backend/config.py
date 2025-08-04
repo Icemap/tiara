@@ -7,6 +7,8 @@ DEBUG: bool = os.getenv("DEBUG", "false").lower() in ("true", "1", "yes")
 # SECRET_KEY: str = os.getenv("SECRET_KEY")
 
 REPLY_LABEL: str = os.getenv("REPLY_LABEL", default="tiara")
+RETRIEVAL_LIMIT: int = int(os.getenv("RETRIEVAL_LIMIT", default=10))
+REPLY_LIMIT: int = int(os.getenv("REPLY_LIMIT", default=10))
 
 SERVERLESS_CLUSTER_HOST: str = os.getenv("SERVERLESS_CLUSTER_HOST")
 SERVERLESS_CLUSTER_PORT: int = int(os.getenv("SERVERLESS_CLUSTER_PORT"))
